@@ -256,6 +256,8 @@ class Session:
                         if not url: raise RuntimeError("No authorized download URL returned by Canvas")
                         parsed = urlparse(url)
                         if parsed.scheme != "https": raise RuntimeError("Insecure download URL")
+                        if self.access_token and parsed.netloc != urlparse(self.origin).netloc:
+                            raise RuntimeError("External file host requires separate safe download handling in token mode")
                         # Canvas may return expiring signed URLs on trusted storage hosts.
                         # Playwright APIRequestContext follows redirects with current Canvas cookies.
                         response = request.get(url, timeout=180000)

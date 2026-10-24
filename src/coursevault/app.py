@@ -40,6 +40,7 @@ class CourseVault(QWidget):
         self.courses = []
         self.jobs = []
         self.cancel = threading.Event()
+        self.token = ""
         self.refresh_after_login = False
         self.setWindowTitle("CourseVault · Your courses, preserved")
         self.resize(950, 700)
@@ -80,10 +81,18 @@ class CourseVault(QWidget):
         self.origin = QLineEdit(DEFAULT_ORIGIN)
         self.origin.setPlaceholderText("https://your-school.instructure.com")
         root.addWidget(self.origin)
+        self.token_input = QLineEdit()
+        self.token_input.setPlaceholderText("Optional: Canvas access token (alternative to browser login)")
+        self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
+        root.addWidget(self.token_input)
         actions = QHBoxLayout()
         self.login_btn = QPushButton("Connect to Canvas")
         self.login_btn.clicked.connect(self.login)
         actions.addWidget(self.login_btn)
+        self.token_btn = QPushButton("Connect with token")
+        self.token_btn.setObjectName("secondary")
+        self.token_btn.clicked.connect(self.connect_token)
+        actions.addWidget(self.token_btn)
         self.refresh_btn = QPushButton("Refresh courses")
         self.refresh_btn.setObjectName("secondary")
         self.refresh_btn.clicked.connect(self.refresh)
@@ -121,9 +130,11 @@ class CourseVault(QWidget):
 
     def run_job(self, operation, callback, exporting=False):
         self.login_btn.setEnabled(False)
+        self.token_btn.setEnabled(False)
         self.refresh_btn.setEnabled(False)
         self.export_btn.setEnabled(False)
         self.origin.setEnabled(False)
+        self.token_input.setEnabled(False)
         self.cancel_btn.setEnabled(exporting)
         self.cancel_btn.setText("Cancel sign-in" if exporting and not self.list.selectedItems() else "Cancel operation")
         self.progress.setRange(0, 0)
@@ -143,8 +154,10 @@ class CourseVault(QWidget):
             self.progress.setRange(0, 100)
             self.progress.setValue(100 if exporting else 0)
             self.login_btn.setEnabled(True)
+            self.token_btn.setEnabled(True)
             self.refresh_btn.setEnabled(True)
             self.origin.setEnabled(True)
+            self.token_input.setEnabled(True)
             self.cancel_btn.setEnabled(False)
             self.selection_changed()
             if self.refresh_after_login:
@@ -154,9 +167,20 @@ class CourseVault(QWidget):
         thread.start()
 
     def session(self):
-        return Session(origin=self.origin.text().strip())
+        return Session(origin=self.origin.text().strip(), access_token=self.token or None)
+
+    def connect_token(self):
+        token = self.token_input.text().strip()
+        if not token:
+            self.show_error("Enter a Canvas access token first. Find it in Canvas Account → Settings → New Access Token, if your institution permits tokens.")
+            return
+        self.token = token
+        self.token_input.clear()
+        self.message.setText("Verifying Canvas token and loading courses…")
+        self.refresh()
 
     def login(self):
+        self.token = ""
         server = self.origin.text().strip()
         self.message.setText("Opening the official Canvas sign-in page…")
         self.cancel.clear()
@@ -169,7 +193,8 @@ class CourseVault(QWidget):
     def refresh(self):
         server = self.origin.text().strip()
         self.message.setText("Loading courses…")
-        self.run_job(lambda emit: Session(origin=server).courses(), self.loaded)
+        token = self.token
+        self.run_job(lambda emit: Session(origin=server, access_token=token or None).courses(), self.loaded)
 
     def loaded(self, courses):
         self.courses = courses
@@ -189,8 +214,9 @@ class CourseVault(QWidget):
         self.cancel.clear()
         server = self.origin.text().strip()
         self.message.setText("Discovering course content…")
+        token = self.token
         self.run_job(
-            lambda emit: Session(origin=server).export(course, Path(path), notify=emit, cancel=self.cancel),
+            lambda emit: Session(origin=server, access_token=token or None).export(course, Path(path), notify=emit, cancel=self.cancel),
             lambda report: self.exported(path, report),
             exporting=True,
         )

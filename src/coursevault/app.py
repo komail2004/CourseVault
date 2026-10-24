@@ -125,6 +125,7 @@ class CourseVault(QWidget):
         self.export_btn.setEnabled(False)
         self.origin.setEnabled(False)
         self.cancel_btn.setEnabled(exporting)
+        self.cancel_btn.setText("Cancel sign-in" if exporting and not self.list.selectedItems() else "Cancel operation")
         self.progress.setRange(0, 0)
         thread = QThread(self)
         worker = Worker(operation)
@@ -158,7 +159,8 @@ class CourseVault(QWidget):
     def login(self):
         server = self.origin.text().strip()
         self.message.setText("Opening the official Canvas sign-in page…")
-        self.run_job(lambda emit: Session(origin=server).login(), self.logged_in)
+        self.cancel.clear()
+        self.run_job(lambda emit: Session(origin=server).login(notify=emit, cancel=self.cancel), self.logged_in, exporting=True)
 
     def logged_in(self, _):
         self.message.setText("Signed in. Loading your courses…")

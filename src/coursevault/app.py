@@ -40,6 +40,7 @@ class CourseVault(QWidget):
         self.courses = []
         self.jobs = []
         self.cancel = threading.Event()
+        self.refresh_after_login = False
         self.setWindowTitle("CourseVault · Your courses, preserved")
         self.resize(950, 700)
         self.setMinimumSize(640, 530)
@@ -145,6 +146,9 @@ class CourseVault(QWidget):
             self.origin.setEnabled(True)
             self.cancel_btn.setEnabled(False)
             self.selection_changed()
+            if self.refresh_after_login:
+                self.refresh_after_login = False
+                self.refresh()
         thread.finished.connect(done)
         thread.start()
 
@@ -158,7 +162,7 @@ class CourseVault(QWidget):
 
     def logged_in(self, _):
         self.message.setText("Signed in. Loading your courses…")
-        self.refresh()
+        self.refresh_after_login = True
 
     def refresh(self):
         server = self.origin.text().strip()

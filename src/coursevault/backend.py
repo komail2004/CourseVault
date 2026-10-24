@@ -52,33 +52,68 @@ class Session:
         self.origin = validate_origin(self.origin)
         self.state_file = Path(self.state_file)
 
-    def login(self):
-        """Use real Canvas login, including institution SSO or MFA when configured."""
+    def login(self, notify=None, cancel=None):
+        """Sign in through Canvas, including supported institutional SSO flows.
+
+        Verify login via the Canvas API from the Canvas origin, not the SSO
+        provider origin. Display actionable status and allow cancellation.
+        """
+        import time
+        emit = notify or (lambda message: None)
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as pw:
+            emit("Launching Canvas sign-in browser…")
             browser = pw.chromium.launch(headless=False)
-            context = browser.new_context(accept_downloads=False)
-            if self.state_file.exists():
-                context.close()
-                context = browser.new_context(storage_state=str(self.state_file))
-            page = context.new_page()
-            page.goto(self.origin, wait_until="domcontentloaded")
-            # Login completion is verified by the API, not by redirect URL patterns.
+            context = None
             try:
-                page.wait_for_function(
-                    """async () => {
-                      try {
-                        const r = await fetch('/api/v1/users/self', {credentials:'same-origin'});
-                        return r.ok && (r.headers.get('content-type')||'').includes('json');
-                      } catch {return false;}
-                    }""", timeout=180000, polling=1500
+                options = {"accept_downloads": False}
+                if self.state_file.exists():
+                    options["storage_state"] = str(self.state_file)
+                context = browser.new_context(**options)
+                page = context.new_page()
+                emit("Opening Canvas. Complete sign-in in the browser window…")
+                page.goto(self.origin, wait_until="commit", timeout=30000)
+                deadline = time.monotonic() + 180
+                while time.monotonic() < deadline:
+                    if cancel is not None and cancel.is_set():
+                        raise Cancelled("Sign-in cancelled")
+                    if not context.pages:
+                        raise RuntimeError("Sign-in browser was closed before authentication completed.")
+                    # Authentication might finish in a different browser tab.
+                    for tab in context.pages:
+                        if tab.is_closed():
+                            continue
+                        try:
+                            current = urlparse(tab.url)
+                            if current.netloc != urlparse(self.origin).netloc:
+                                continue
+                            result = tab.evaluate("""async () => {
+                                try {
+                                  const response = await fetch('/api/v1/users/self', {
+                                    credentials:'same-origin',
+                                    headers:{Accept:'application/json'}
+                                  });
+                                  if (!response.ok) return false;
+                                  const data = await response.json();
+                                  return Boolean(data && data.id);
+                                } catch {return false;}
+                            }""")
+                            if result:
+                                context.storage_state(path=str(self.state_file))
+                                try: self.state_file.chmod(0o600)
+                                except OSError: pass
+                                emit("Canvas login verified.")
+                                return True
+                        except Exception:
+                            pass
+                    time.sleep(1.5)
+                raise RuntimeError(
+                    "Canvas login timed out after 3 minutes. Check the sign-in browser "
+                    "and any institutional SSO/MFA prompts, then try again."
                 )
-                context.storage_state(path=str(self.state_file))
-                try: self.state_file.chmod(0o600)
-                except OSError: pass
             finally:
+                if context: context.close()
                 browser.close()
-        return True
 
     def clear_session(self):
         self.state_file.unlink(missing_ok=True)

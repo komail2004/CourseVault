@@ -1,4 +1,4 @@
-name: Desktop builds
+name: Desktop builds (experimental)
 on:
   workflow_dispatch:
 jobs:
@@ -15,7 +15,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e . pyinstaller
       - run: python -m playwright install chromium
-      - run: pyinstaller --noconfirm --windowed --name CourseVault --collect-all playwright src/coursevault/app.py
+      - run: pyinstaller --noconfirm --windowed --name CourseVault --collect-all playwright launch_coursevault.py
       - uses: actions/upload-artifact@v4
         with:
           name: CourseVault-${{ matrix.os }}

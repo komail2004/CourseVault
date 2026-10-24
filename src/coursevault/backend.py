@@ -47,6 +47,7 @@ class Cancelled(Exception):
 class Session:
     origin: str = DEFAULT_ORIGIN
     state_file: Path = Path.home() / ".coursevault" / "session.json"
+    access_token: str | None = None
 
     def __post_init__(self):
         self.origin = validate_origin(self.origin)
@@ -119,8 +120,13 @@ class Session:
         self.state_file.unlink(missing_ok=True)
 
     def _request_context(self, pw):
+        if self.access_token:
+            return pw.request.new_context(
+                extra_http_headers={"Authorization": "Bearer " + self.access_token},
+                timeout=90000, max_redirects=10
+            )
         if not self.state_file.exists():
-            raise RuntimeError("Sign in first to create a Canvas session.")
+            raise RuntimeError("Sign in first, or use a Canvas access token.")
         return pw.request.new_context(storage_state=str(self.state_file), timeout=90000, max_redirects=10)
 
     def _get_json(self, request, path: str):

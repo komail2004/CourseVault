@@ -161,13 +161,23 @@ class Session:
                     (root / dirname).mkdir()
                 (root / "course.json").write_text(json.dumps(inventory, ensure_ascii=False, indent=2), encoding="utf-8")
                 page_links = []
+                direct_media = []
                 for index, page in enumerate(inventory["pages"]):
                     if cancel and cancel.is_set(): raise Cancelled("Export cancelled")
                     filename = f'{index+1:03d}-{safe_name(page.get("title") or page.get("url"))}.html'
                     body = page.get("body") or ""
                     soup = BeautifulSoup(body, "html.parser")
                     for node in soup.select("iframe[src],video[src],source[src],audio[src]"):
-                        report["skipped"].append({"media":node.get("src"),"reason":"Embedded media: provider download integration not available"})
+                        source = node.get("src")
+                        if not source: continue
+                        resolved = urljoin(self.origin + "/", source)
+                        parsed_media = urlparse(resolved)
+                        # Only explicit, direct downloadable media on the Canvas origin.
+                        if (node.name != "iframe" and parsed_media.netloc == urlparse(self.origin).netloc
+                                and parsed_media.path.lower().endswith((".mp4",".webm",".mp3",".m4a",".ogg"))):
+                            direct_media.append((resolved, str(page.get("title") or "lesson")))
+                        else:
+                            report["skipped"].append({"media":source,"reason":"Embedded or hosted media: no supported direct download"})
                     html_doc = "<!doctype html><html><head><meta charset='utf-8'><title>" + html.escape(str(page.get("title") or "")) + "</title></head><body>" + str(soup) + "</body></html>"
                     (root / "pages" / filename).write_text(html_doc, encoding="utf-8")
                     page_links.append(("pages/" + filename, str(page.get("title") or filename)))
@@ -176,6 +186,22 @@ class Session:
                         name = safe_name(item.get("name") or item.get("title") or item.get("id"))
                         filename = safe_slug(item.get("id")) + "-" + name + ".json"
                         (root / category / filename).write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
+                (root / "media").mkdir()
+                for media_index, (media_url, media_title) in enumerate(direct_media):
+                    if cancel and cancel.is_set(): raise Cancelled("Export cancelled")
+                    media_name = f"{media_index+1:03d}-" + safe_name(media_title) + Path(urlparse(media_url).path).suffix.lower()
+                    notify("Downloading direct Canvas media: " + media_name)
+                    try:
+                        response = request.get(media_url, timeout=180000)
+                        if not response.ok: raise RuntimeError("HTTP " + str(response.status))
+                        if "text/html" in response.headers.get("content-type",""):
+                            raise RuntimeError("Media URL returned HTML")
+                        payload = response.body()
+                        (root / "media" / media_name).write_bytes(payload)
+                        report["downloaded"].append({"name":media_name,"bytes":len(payload)})
+                        page_links.append(("media/" + media_name,media_name))
+                    except Exception as exc:
+                        report["skipped"].append({"media":media_url,"reason":str(exc)})
                 total = len(inventory["files"])
                 for index, file in enumerate(inventory["files"]):
                     if cancel and cancel.is_set(): raise Cancelled("Export cancelled")

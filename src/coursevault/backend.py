@@ -260,13 +260,46 @@ class Session:
                             raise RuntimeError("External file host requires separate safe download handling in token mode")
                         # Canvas may return expiring signed URLs on trusted storage hosts.
                         # Playwright APIRequestContext follows redirects with current Canvas cookies.
-                        response = request.get(url, timeout=180000)
-                        if not response.ok: raise RuntimeError("HTTP " + str(response.status))
-                        content_type = response.headers.get("content-type","")
-                        if "text/html" in content_type: raise RuntimeError("Server returned HTML instead of a file")
-                        payload = response.body()
+                        if self.access_token:
+                            # Do not forward Canvas authorization headers across redirects.
+                            import httpx
+                            current_url = url
+                            with httpx.Client(follow_redirects=False,timeout=120) as http:
+                                for redirect_count in range(8):
+                                    destination = urlparse(current_url)
+                                    if destination.scheme != "https":
+                                        raise RuntimeError("Insecure file redirect")
+                                    headers = {}
+                                    if destination.netloc == urlparse(self.origin).netloc:
+                                        headers["Authorization"] = "Bearer " + self.access_token
+                                    with http.stream("GET",current_url,headers=headers) as stream:
+                                        if stream.status_code in (301,302,303,307,308):
+                                            location = stream.headers.get("location")
+                                            if not location: raise RuntimeError("Redirect without location")
+                                            current_url = urljoin(current_url,location)
+                                            continue
+                                        stream.raise_for_status()
+                                        if "text/html" in stream.headers.get("content-type",""):
+                                            raise RuntimeError("Server returned HTML instead of a file")
+                                        target = root / "files" / filename
+                                        with target.open("wb") as handle:
+                                            for chunk in stream.iter_bytes(chunk_size=1024*1024):
+                                                if cancel and cancel.is_set(): raise Cancelled("Export cancelled")
+                                                handle.write(chunk)
+                                        payload_size = target.stat().st_size
+                                        break
+                                else:
+                                    raise RuntimeError("Too many file redirects")
+                        else:
+                            response = request.get(url, timeout=180000)
+                            if not response.ok: raise RuntimeError("HTTP " + str(response.status))
+                            content_type = response.headers.get("content-type","")
+                            if "text/html" in content_type: raise RuntimeError("Server returned HTML instead of a file")
+                            payload = response.body()
+                            (root / "files" / filename).write_bytes(payload)
+                            payload_size = len(payload)
                         (root / "files" / filename).write_bytes(payload)
-                        report["downloaded"].append({"name":name,"bytes":len(payload)})
+                        report["downloaded"].append({"name":name,"bytes":payload_size})
                         page_links.append(("files/" + filename,name))
                     except Exception as exc:
                         report["skipped"].append({"file":name,"reason":str(exc)})

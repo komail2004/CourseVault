@@ -298,7 +298,6 @@ class Session:
                             payload = response.body()
                             (root / "files" / filename).write_bytes(payload)
                             payload_size = len(payload)
-                        (root / "files" / filename).write_bytes(payload)
                         report["downloaded"].append({"name":name,"bytes":payload_size})
                         page_links.append(("files/" + filename,name))
                     except Exception as exc:

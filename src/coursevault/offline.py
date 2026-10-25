@@ -124,7 +124,9 @@ def archive(session, course, inventory, output, notify=lambda _:None, cancel=Non
             for item in module.get("items",[]):
                 kind=item.get("type","Item");target=""
                 if kind=="Page":target=page_paths.get(str(item.get("page_url")),"")
-                if kind=="File":target=files.get(str(item.get("content_id")),"")
+                if kind=="File":
+                    candidate=files.get(str(item.get("content_id")),"")
+                    target=candidate if candidate and (root/candidate).exists() else ""
                 section["items"].append({"type":kind,"title":item.get("title") or kind,"path":target})
             modules.append(section)
         for kind,key in (("Page","pages"),("File","files"),("Assignment","assignments"),("Discussion","discussions"),("Quiz","quizzes")):
@@ -132,7 +134,9 @@ def archive(session, course, inventory, output, notify=lambda _:None, cancel=Non
             for item in inventory.get(key,[]):
                 target=""
                 if kind=="Page":target=page_paths.get(str(item.get("url")),"")
-                if kind=="File":target=files.get(str(item.get("id")),"") if (root/files.get(str(item.get("id")),"_missing")).exists() else ""
+                if kind=="File":
+                    candidate=files.get(str(item.get("id")),"")
+                    target=candidate if candidate and (root/candidate).exists() else ""
                 if kind in ("Assignment","Discussion","Quiz"):
                     target="pages/"+kind.lower()+"-"+str(item.get("id"))+".html"
                     body=item.get("description") or item.get("message") or ""

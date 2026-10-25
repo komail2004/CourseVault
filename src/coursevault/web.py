@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from .backend import Session, validate_origin
+from .offline import archive
 
 app = FastAPI(title="CourseVault", docs_url=None, redoc_url=None)
 BASE = Path(tempfile.mkdtemp(prefix="coursevault-web-"))
@@ -121,8 +122,14 @@ def start_export(payload: ExportPayload, request: Request):
         try:
             def notify(message):
                 job["message"] = message
-            report = Session(origin=session.origin,access_token=session.token).export(
-                course, job["path"],notify=notify,cancel=job["cancel"])
+            client = Session(origin=session.origin, access_token=session.token)
+            with __import__("playwright.sync_api",fromlist=["sync_playwright"]).sync_playwright() as pw:
+                request = client._request_context(pw)
+                try:
+                    inventory = client.inventory(request, int(course["id"]), notify)
+                finally:
+                    request.dispose()
+            report = archive(client, course, inventory, job["path"], notify=notify, cancel=job["cancel"])
             job["report"] = report
             job["status"] = "done"
             job["message"] = "Archive ready to download."

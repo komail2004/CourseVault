@@ -104,7 +104,7 @@ def archive(session, course, inventory, output, notify=lambda _:None, cancel=Non
             page_paths[slug]="pages/"+str(i+1).zfill(3)+"-"+name(page.get("title") or slug)+".html"
         for page in inventory.get("pages",[]):
             soup=BeautifulSoup(page.get("body") or "","html.parser")
-            for tag in soup.select("script,form,object,embed"):tag.decompose()
+            for tag in soup.select("script,form,object,embed,base"):tag.decompose()
             for tag in soup.select("*"):
                 for attribute in list(tag.attrs):
                     if attribute.lower().startswith("on"):del tag.attrs[attribute]

@@ -1,6 +1,6 @@
 # ✦ CourseVault
 
-A modern **local web application** for exporting your accessible Canvas course materials to ZIP.
+A modern **local web application** that turns authorized Canvas course materials into a navigable **offline course website** packaged in a ZIP.
 
 ## Run CourseVault
 
@@ -23,18 +23,18 @@ Your regular browser opens automatically at **http://127.0.0.1:8765**. If it doe
 2. Open **Account → Settings → New Access Token**, if your institution enables API tokens.
 3. Create a token for your own account. Paste it into CourseVault, then click **Connect to Canvas**.
 4. Choose a course and click **Export selected course**.
-5. When ready, click **Download ZIP**.
+5. When ready, click **Download ZIP**, extract it, and double-click **index.html** to explore your offline course.
 
 Never share your Canvas token, screenshots of the token, or the resulting archive with unauthorized people. If your institution disables API tokens, a hosted OAuth integration requires an approved Canvas developer key.
 
 ## What is exported
 
-- Course metadata, modules and module items
+- A styled offline website with course navigation and searchable lesson titles\n- Course metadata, modules and module items
 - HTML pages, assignments, discussions and quiz metadata
 - Available downloadable Canvas files and directly linked Canvas-hosted media
 - Offline index and `export-report.json` listing unsupported/skipped resources
 
-**Limitations:** Third-party embedded videos (Vimeo, Panopto, Canvas Studio, etc.) are not automatically downloaded. Some signed external file URLs are skipped in token mode to protect credentials. Very large files are buffered in memory and may require improvements. Content still depends on your Canvas permissions.
+**Limitations:** Third-party embedded videos (Vimeo, Panopto, Canvas Studio, Kaltura, DRM/HLS/DASH players, etc.) are not automatically downloaded unless a separate provider-authorized downloadable file is exposed. Canvas course theme, quizzes, submissions, grading, and dynamic widgets cannot be reproduced exactly offline. Some signed external file URLs are skipped in token mode to protect credentials. Very large files are buffered in memory and may require improvements. Content still depends on your Canvas permissions.
 
 ## Privacy and architecture
 
